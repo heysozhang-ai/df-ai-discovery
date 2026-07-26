@@ -60,7 +60,9 @@ class GoogleMaps:
             return False
 
         for attempt in range(3):
+
             try:
+
                 cards = self.results()
 
                 card = cards.nth(index)
@@ -69,26 +71,48 @@ class GoogleMaps:
 
                 self.page.wait_for_timeout(300)
 
-                card.click(timeout=5000)
+                card.click(timeout=5000, force=True)
 
-                self.page.locator("h1").first.wait_for(timeout=10000)
+                self.page.locator("h1").first.wait_for(timeout=5000)
 
                 return True
 
             except TimeoutError:
+
                 print(f"Retry open business {index} ({attempt + 1}/3)")
+
                 self.page.wait_for_timeout(1000)
 
             except Exception as e:
+
                 print(f"Open failed: {e}")
+
                 self.page.wait_for_timeout(1000)
 
         return False
 
     def back_to_results(self):
 
-        self.page.go_back(wait_until="domcontentloaded")
+        try:
 
-        self.page.locator('div[role="feed"]').first.wait_for(timeout=15000)
+            back = self.page.locator('button[aria-label="Back"]').first
 
-        self.page.wait_for_timeout(1000)
+            if back.count() > 0:
+                back.click(timeout=3000)
+
+            else:
+                self.page.go_back(wait_until="domcontentloaded")
+
+        except:
+
+            try:
+                self.page.go_back(wait_until="domcontentloaded")
+            except:
+                pass
+
+        try:
+            self.page.locator('div[role="feed"]').first.wait_for(timeout=10000)
+        except:
+            pass
+
+        self.page.wait_for_timeout(800)
