@@ -14,7 +14,16 @@ class Storage:
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
 
+        self.cursor.execute("PRAGMA journal_mode=WAL")
+        self.cursor.execute("PRAGMA synchronous=NORMAL")
+        self.cursor.execute("PRAGMA temp_store=MEMORY")
+
+        self._dirty = 0
+        self._commit_every = 20
+        self._known_urls = set()
+
         self.create_tables()
+        self._load_known_urls()
 
     def create_tables(self):
 
@@ -68,21 +77,30 @@ class Storage:
 
         for column, column_type in upgrades.items():
             if column not in columns:
-                print(f"Add column: {column}")
                 self.cursor.execute(
                     f"ALTER TABLE discovery ADD COLUMN {column} {column_type}"
                 )
 
         self.conn.commit()
 
+    def _load_known_urls(self):
+
+        self.cursor.execute("SELECT maps_url FROM discovery WHERE maps_url IS NOT NULL")
+        self._known_urls = {row["maps_url"] for row in self.cursor.fetchall()}
+
+    def _touch(self):
+
+        self._dirty += 1
+        if self._dirty >= self._commit_every:
+            self.conn.commit()
+            self._dirty = 0
+
     def exists(self, maps_url):
 
-        self.cursor.execute(
-            "SELECT id FROM discovery WHERE maps_url=?",
-            (maps_url,)
-        )
+        if not maps_url:
+            return False
 
-        return self.cursor.fetchone() is not None
+        return maps_url in self._known_urls
 
     def save(self, business: Business):
 
@@ -165,7 +183,10 @@ class Storage:
             ),
         )
 
-        self.conn.commit()
+        if business.maps_url:
+            self._known_urls.add(business.maps_url)
+
+        self._touch()
 
     def update(self, business: Business):
 
@@ -224,9 +245,13 @@ class Storage:
             ),
         )
 
-        self.conn.commit()
+        self._touch()
 
     def get_pending(self):
+
+        if self._dirty:
+            self.conn.commit()
+            self._dirty = 0
 
         self.cursor.execute(
             """
@@ -241,4 +266,9 @@ class Storage:
 
     def close(self):
 
+        if self._dirty:
+            self.conn.commit()
+            self._dirty = 0
+
+        self._known_urls.clear()
         self.conn.close()

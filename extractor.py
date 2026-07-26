@@ -1,205 +1,147 @@
+import re
+
 from playwright.sync_api import Page
 
 from models.business import Business
 
+
+_ICON_RE = re.compile(r"[\ue000-\uf8ff]")
+_SPACE_RE = re.compile(r"\s+")
+
+
+def _clean_text(value: str) -> str:
+
+    if not value:
+        return ""
+
+    value = _ICON_RE.sub("", value)
+    return _SPACE_RE.sub(" ", value).strip()
+
+
 class BusinessExtractor:
 
-    def __init__(self, page: Page):
+    _TYPE_KEYWORDS = (
+        "repair",
+        "service",
+        "auto",
+        "mechanic",
+        "garage",
+        "european",
+        "bmw",
+        "transmission",
+        "tire",
+        "oil",
+        "body",
+    )
 
+    def __init__(self, page: Page):
         self.page = page
+        self._h1 = None
+        self._keywords = list(self._TYPE_KEYWORDS)
+
+    def _cache_locators(self):
+        self._h1 = self.page.locator("h1").first
 
     def open_first_business(self):
 
         cards = self.page.locator('a[href*="/place/"]')
-
-        cards.first.wait_for(timeout=10000)
-
+        cards.first.wait_for(state="visible", timeout=10000)
         cards.first.click()
-
-        self.page.wait_for_timeout(3000)
+        self._cache_locators()
+        self._h1.wait_for(state="visible", timeout=10000)
 
     def extract(self):
+        """Extract business fields from the current place page (after page.goto)."""
 
         business = Business()
-
         business.maps_url = self.page.url
 
-        # ---------- Name ----------
-
-        business.name = ""
+        if self._h1 is None:
+            self._cache_locators()
 
         try:
-
-            h1 = self.page.locator("h1").first.inner_text().strip()
-
-            if h1 and h1.lower() != "results":
-
-                business.name = h1
-
-        except:
-
+            self._h1.wait_for(state="visible", timeout=5000)
+        except Exception:
             pass
+
+        try:
+            data = self.page.evaluate(
+                """(keywords) => {
+                    const clean = (el) => {
+                        if (!el) return "";
+                        return (el.innerText || "")
+                            .replace(/[\\uE000-\\uF8FF]/g, "")
+                            .replace(/\\s+/g, " ")
+                            .trim();
+                    };
+
+                    let name = "";
+                    const h1 = document.querySelector("h1");
+                    if (h1) {
+                        const t = (h1.innerText || "").trim();
+                        if (t && t.toLowerCase() !== "results") name = t;
+                    }
+
+                    const website = document.querySelector('a[data-item-id="authority"]');
+                    const phone = document.querySelector('button[data-item-id^="phone"]');
+                    const address = document.querySelector('button[data-item-id="address"]');
+
+                    let business_type = "Unknown";
+                    const buttons = document.querySelectorAll("button[jsaction]");
+                    for (let i = 0; i < Math.min(buttons.length, 50); i++) {
+                        const text = (buttons[i].innerText || "").trim();
+                        if (!text || text.length > 40) continue;
+                        const lower = text.toLowerCase();
+                        if (keywords.some((k) => lower.includes(k))) {
+                            business_type = text;
+                            break;
+                        }
+                    }
+
+                    let is_open = true;
+                    const statusEl = document.querySelector(
+                        'div[aria-label*="Open"], div[aria-label*="Closed"]'
+                    );
+                    if (statusEl) {
+                        const status = (statusEl.innerText || "").toLowerCase();
+                        if (
+                            status.includes("temporarily closed") ||
+                            status.includes("permanently closed") ||
+                            (status.includes("closed") && !status.includes("open"))
+                        ) {
+                            is_open = false;
+                        }
+                    }
+
+                    return {
+                        name,
+                        website: website ? website.href : "",
+                        phone: clean(phone),
+                        address: clean(address),
+                        business_type,
+                        is_open,
+                    };
+                }""",
+                self._keywords,
+            )
+        except Exception:
+            data = {}
+
+        business.name = _clean_text(data.get("name") or "")
+        business.website = (data.get("website") or "").strip()
+        business.phone = _clean_text(data.get("phone") or "")
+        business.address = _clean_text(data.get("address") or "")
+        business.business_type = data.get("business_type") or "Unknown"
+        business.is_open = bool(data.get("is_open", True))
 
         if not business.name:
-
             try:
-
                 title = self.page.title()
-
                 if " - Google Maps" in title:
-
-                    business.name = title.replace(" - Google Maps", "").strip()
-
-            except:
-
+                    business.name = _clean_text(
+                        title.replace(" - Google Maps", "")
+                    )
+            except Exception:
                 pass
-
-        # ---------- Website ----------
-
-        business.website = ""
-
-        try:
-
-            business.website = (
-
-                self.page.locator(
-
-                    'a[data-item-id="authority"]'
-
-                ).get_attribute("href")
-
-                or ""
-
-            )
-
-        except:
-
-            pass
-
-        # ---------- Phone ----------
-
-        business.phone = ""
-
-        try:
-
-            business.phone = (
-
-                self.page.locator(
-
-                    'button[data-item-id^="phone"]'
-
-                ).inner_text().strip()
-
-            )
-
-        except:
-
-            pass
-
-        # ---------- Address ----------
-
-        business.address = ""
-
-        try:
-
-            business.address = (
-
-                self.page.locator(
-
-                    'button[data-item-id="address"]'
-
-                ).inner_text().strip()
-
-            )
-
-        except:
-
-            pass
-
-        # ---------- Business Type ----------
-
-        business.business_type = "Unknown"
-
-        try:
-
-            chips = self.page.locator('button[jsaction]')
-
-            keywords = [
-
-                "Repair",
-
-                "Service",
-
-                "Auto",
-
-                "Mechanic",
-
-                "Garage",
-
-                "European",
-
-                "BMW",
-
-                "Transmission",
-
-                "Tire",
-
-                "Oil",
-
-                "Body",
-
-            ]
-
-            for i in range(min(chips.count(), 50)):
-
-                text = chips.nth(i).inner_text().strip()
-
-                if len(text) > 40:
-
-                    continue
-
-                if any(k.lower() in text.lower() for k in keywords):
-
-                    business.business_type = text
-
-                    break
-
-        except:
-
-            pass
-
-        # ---------- Open Status ----------
-
-        business.is_open = True
-
-        try:
-
-            status = self.page.locator(
-
-                'div[aria-label*="Open"], div[aria-label*="Closed"]'
-
-            ).first.inner_text()
-
-            status = status.lower()
-
-            if "temporarily closed" in status:
-
-                business.is_open = False
-
-            elif "permanently closed" in status:
-
-                business.is_open = False
-
-            elif "closed" in status:
-
-                business.is_open = False
-
-            elif "open" in status:
-
-                business.is_open = True
-
-        except:
-
-            pass
 
         return business
