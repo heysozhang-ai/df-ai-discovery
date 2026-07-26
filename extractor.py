@@ -1,10 +1,11 @@
 from playwright.sync_api import Page
-from models.business import Business
 
+from models.business import Business
 
 class BusinessExtractor:
 
     def __init__(self, page: Page):
+
         self.page = page
 
     def open_first_business(self):
@@ -23,88 +24,182 @@ class BusinessExtractor:
 
         business.maps_url = self.page.url
 
-        # ---------------- Name ----------------
+        # ---------- Name ----------
+
+        business.name = ""
 
         try:
-            business.name = (
-                self.page.locator("h1").first.inner_text().strip()
+
+            h1 = self.page.locator("h1").first.inner_text().strip()
+
+            if h1 and h1.lower() != "results":
+
+                business.name = h1
+
+        except:
+
+            pass
+
+        if not business.name:
+
+            try:
+
+                title = self.page.title()
+
+                if " - Google Maps" in title:
+
+                    business.name = title.replace(" - Google Maps", "").strip()
+
+            except:
+
+                pass
+
+        # ---------- Website ----------
+
+        business.website = ""
+
+        try:
+
+            business.website = (
+
+                self.page.locator(
+
+                    'a[data-item-id="authority"]'
+
+                ).get_attribute("href")
+
+                or ""
+
             )
-        except:
-            business.name = ""
 
-        # ---------------- Website ----------------
+        except:
+
+            pass
+
+        # ---------- Phone ----------
+
+        business.phone = ""
 
         try:
-            business.website = self.page.locator(
-                'a[data-item-id="authority"]'
-            ).get_attribute("href") or ""
-        except:
-            business.website = ""
 
-        # ---------------- Phone ----------------
+            business.phone = (
+
+                self.page.locator(
+
+                    'button[data-item-id^="phone"]'
+
+                ).inner_text().strip()
+
+            )
+
+        except:
+
+            pass
+
+        # ---------- Address ----------
+
+        business.address = ""
 
         try:
-            business.phone = self.page.locator(
-                'button[data-item-id^="phone"]'
-            ).inner_text().strip()
-        except:
-            business.phone = ""
 
-        # ---------------- Address ----------------
+            business.address = (
+
+                self.page.locator(
+
+                    'button[data-item-id="address"]'
+
+                ).inner_text().strip()
+
+            )
+
+        except:
+
+            pass
+
+        # ---------- Business Type ----------
+
+        business.business_type = "Unknown"
 
         try:
-            business.address = self.page.locator(
-                'button[data-item-id="address"]'
-            ).inner_text().strip()
-        except:
-            business.address = ""
 
-        # ---------------- Business Type ----------------
+            chips = self.page.locator('button[jsaction]')
 
-        try:
-            buttons = self.page.locator("button")
+            keywords = [
 
-            for i in range(min(buttons.count(), 30)):
+                "Repair",
 
-                text = buttons.nth(i).inner_text().strip()
+                "Service",
 
-                if (
-                    "BMW" in text
-                    or "Repair" in text
-                    or "Auto" in text
-                    or "Mechanic" in text
-                    or "Service" in text
-                    or "Workshop" in text
-                    or "Garage" in text
-                ):
+                "Auto",
+
+                "Mechanic",
+
+                "Garage",
+
+                "European",
+
+                "BMW",
+
+                "Transmission",
+
+                "Tire",
+
+                "Oil",
+
+                "Body",
+
+            ]
+
+            for i in range(min(chips.count(), 50)):
+
+                text = chips.nth(i).inner_text().strip()
+
+                if len(text) > 40:
+
+                    continue
+
+                if any(k.lower() in text.lower() for k in keywords):
+
                     business.business_type = text
+
                     break
 
         except:
-            business.business_type = "Unknown"
 
-        if not business.business_type:
-            business.business_type = "Unknown"
+            pass
 
-        # ---------------- Open / Closed ----------------
+        # ---------- Open Status ----------
+
+        business.is_open = True
 
         try:
 
-            body = self.page.locator("body").inner_text()
+            status = self.page.locator(
 
-            if "Temporarily closed" in body:
+                'div[aria-label*="Open"], div[aria-label*="Closed"]'
+
+            ).first.inner_text()
+
+            status = status.lower()
+
+            if "temporarily closed" in status:
+
                 business.is_open = False
 
-            elif "Permanently closed" in body:
+            elif "permanently closed" in status:
+
                 business.is_open = False
 
-            elif "Closed" in body:
+            elif "closed" in status:
+
                 business.is_open = False
 
-            elif "Open" in body:
+            elif "open" in status:
+
                 business.is_open = True
 
         except:
-            business.is_open = True
+
+            pass
 
         return business

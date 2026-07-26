@@ -48,48 +48,46 @@ class GoogleMaps:
 
             last = count
 
-            panel.evaluate("(e) => e.scrollTop = e.scrollHeight")
+            panel.evaluate("(e)=>e.scrollTop=e.scrollHeight")
 
-            self.page.wait_for_timeout(800)
+            self.page.wait_for_timeout(500)
 
     def open_business(self, index):
 
-        cards = self.results()
+        try:
 
-        if index >= cards.count():
-            return False
+            cards = self.results()
 
-        for attempt in range(3):
+            if index >= cards.count():
+                return False
+
+            card = cards.nth(index)
+
+            card.scroll_into_view_if_needed()
+
+            self.page.wait_for_timeout(200)
+
+            # 第一次点击
+            card.click(timeout=5000)
 
             try:
-
-                cards = self.results()
-
-                card = cards.nth(index)
-
-                card.scroll_into_view_if_needed()
-
-                self.page.wait_for_timeout(300)
-
-                card.click(timeout=5000, force=True)
-
-                self.page.locator("h1").first.wait_for(timeout=5000)
-
+                self.page.locator("h1").first.wait_for(timeout=3000)
                 return True
+            except:
+                pass
 
-            except TimeoutError:
+            # 第二次点击
+            card.click(timeout=5000, force=True)
 
-                print(f"Retry open business {index} ({attempt + 1}/3)")
+            self.page.locator("h1").first.wait_for(timeout=5000)
 
-                self.page.wait_for_timeout(1000)
+            return True
 
-            except Exception as e:
+        except Exception as e:
 
-                print(f"Open failed: {e}")
+            print(f"Open failed: {e}")
 
-                self.page.wait_for_timeout(1000)
-
-        return False
+            return False
 
     def back_to_results(self):
 
@@ -97,22 +95,21 @@ class GoogleMaps:
 
             back = self.page.locator('button[aria-label="Back"]').first
 
-            if back.count() > 0:
+            if back.is_visible(timeout=1000):
                 back.click(timeout=3000)
-
             else:
-                self.page.go_back(wait_until="domcontentloaded")
+                self.page.go_back()
 
         except:
 
             try:
-                self.page.go_back(wait_until="domcontentloaded")
+                self.page.go_back()
             except:
                 pass
 
         try:
-            self.page.locator('div[role="feed"]').first.wait_for(timeout=10000)
+            self.page.locator('div[role="feed"]').first.wait_for(timeout=5000)
         except:
             pass
 
-        self.page.wait_for_timeout(800)
+        self.page.wait_for_timeout(300)
