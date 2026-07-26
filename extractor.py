@@ -21,31 +21,90 @@ class BusinessExtractor:
 
         business = Business()
 
-        # Name
-        try:
-            business.name = self.page.locator("h1").last.inner_text().strip()
-        except:
-            pass
+        business.maps_url = self.page.url
 
-        # Website
+        # ---------------- Name ----------------
+
+        try:
+            business.name = (
+                self.page.locator("h1").first.inner_text().strip()
+            )
+        except:
+            business.name = ""
+
+        # ---------------- Website ----------------
+
         try:
             business.website = self.page.locator(
                 'a[data-item-id="authority"]'
-            ).get_attribute("href")
+            ).get_attribute("href") or ""
         except:
-            pass
+            business.website = ""
 
-        # Google Maps URL
-        business.maps_url = self.page.url
+        # ---------------- Phone ----------------
 
-        # Open / Closed
         try:
-            text = self.page.locator("body").inner_text()
+            business.phone = self.page.locator(
+                'button[data-item-id^="phone"]'
+            ).inner_text().strip()
+        except:
+            business.phone = ""
 
-            if "Open" in text and "Closed" not in text:
+        # ---------------- Address ----------------
+
+        try:
+            business.address = self.page.locator(
+                'button[data-item-id="address"]'
+            ).inner_text().strip()
+        except:
+            business.address = ""
+
+        # ---------------- Business Type ----------------
+
+        try:
+            buttons = self.page.locator("button")
+
+            for i in range(min(buttons.count(), 30)):
+
+                text = buttons.nth(i).inner_text().strip()
+
+                if (
+                    "BMW" in text
+                    or "Repair" in text
+                    or "Auto" in text
+                    or "Mechanic" in text
+                    or "Service" in text
+                    or "Workshop" in text
+                    or "Garage" in text
+                ):
+                    business.business_type = text
+                    break
+
+        except:
+            business.business_type = "Unknown"
+
+        if not business.business_type:
+            business.business_type = "Unknown"
+
+        # ---------------- Open / Closed ----------------
+
+        try:
+
+            body = self.page.locator("body").inner_text()
+
+            if "Temporarily closed" in body:
+                business.is_open = False
+
+            elif "Permanently closed" in body:
+                business.is_open = False
+
+            elif "Closed" in body:
+                business.is_open = False
+
+            elif "Open" in body:
                 business.is_open = True
 
         except:
-            pass
+            business.is_open = True
 
         return business

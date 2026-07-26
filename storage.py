@@ -11,9 +11,7 @@ class Storage:
         Path("data").mkdir(exist_ok=True)
 
         self.conn = sqlite3.connect("data/discovery.db")
-
         self.conn.row_factory = sqlite3.Row
-
         self.cursor = self.conn.cursor()
 
         self.create_tables()
@@ -51,6 +49,30 @@ class Storage:
         )
         """)
 
+        self.cursor.execute("PRAGMA table_info(discovery)")
+        columns = {row["name"] for row in self.cursor.fetchall()}
+
+        upgrades = {
+            "phone": "TEXT",
+            "address": "TEXT",
+            "email": "TEXT",
+            "business_type": "TEXT",
+            "source": "TEXT",
+            "rule_score": "INTEGER DEFAULT 0",
+            "is_open": "INTEGER DEFAULT 1",
+            "status": "TEXT DEFAULT 'pending'",
+            "approved": "INTEGER DEFAULT 0",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+        }
+
+        for column, column_type in upgrades.items():
+            if column not in columns:
+                print(f"Add column: {column}")
+                self.cursor.execute(
+                    f"ALTER TABLE discovery ADD COLUMN {column} {column_type}"
+                )
+
         self.conn.commit()
 
     def exists(self, maps_url):
@@ -66,83 +88,82 @@ class Storage:
 
         now = datetime.utcnow().isoformat()
 
-        self.cursor.execute("""
+        self.cursor.execute(
+            """
+            INSERT OR IGNORE INTO discovery(
 
-        INSERT OR IGNORE INTO discovery(
+                name,
+                maps_url,
+                website,
+                phone,
+                address,
+                email,
 
-            name,
-            maps_url,
-            website,
-            phone,
-            address,
-            email,
+                business_type,
 
-            business_type,
+                source,
 
-            source,
+                rule_score,
 
-            rule_score,
+                is_open,
 
-            is_open,
+                status,
 
-            status,
+                approved,
 
-            approved,
+                created_at,
 
-            created_at,
+                updated_at
 
-            updated_at
+            )
 
+            VALUES(
+
+                ?,?,?,?,?,?,
+
+                ?,
+
+                ?,
+
+                ?,
+
+                ?,
+
+                ?,
+
+                ?,
+
+                ?,
+
+                ?
+
+            )
+            """,
+            (
+                business.name,
+                business.maps_url,
+                business.website,
+                business.phone,
+                business.address,
+                business.email,
+
+                business.business_type,
+
+                business.source,
+
+                business.rule_score,
+
+                int(business.is_open),
+
+                business.status,
+
+                int(business.approved),
+
+                now,
+
+                now,
+            ),
         )
-
-        VALUES(
-
-            ?,?,?,?,?,?,
-
-            ?,
-
-            ?,
-
-            ?,
-
-            ?,
-
-            ?,
-
-            ?,
-
-            ?,
-
-            ?
-
-        )
-
-        """, (
-
-            business.name,
-            business.maps_url,
-            business.website,
-            business.phone,
-            business.address,
-            business.email,
-
-            business.business_type,
-
-            business.source,
-
-            business.rule_score,
-
-            int(business.is_open),
-
-            business.status,
-
-            int(business.approved),
-
-            now,
-
-            now
-
-        ))
 
         self.conn.commit()
 
@@ -150,75 +171,71 @@ class Storage:
 
         now = datetime.utcnow().isoformat()
 
-        self.cursor.execute("""
+        self.cursor.execute(
+            """
+            UPDATE discovery
 
-        UPDATE discovery
+            SET
 
-        SET
+                name=?,
+                website=?,
+                phone=?,
+                address=?,
+                email=?,
 
-            name=?,
-            website=?,
-            phone=?,
-            address=?,
-            email=?,
+                business_type=?,
 
-            business_type=?,
+                source=?,
 
-            source=?,
+                rule_score=?,
 
-            rule_score=?,
+                is_open=?,
 
-            is_open=?,
+                status=?,
 
-            status=?,
+                approved=?,
 
-            approved=?,
+                updated_at=?
 
-            updated_at=?
+            WHERE maps_url=?
+            """,
+            (
+                business.name,
+                business.website,
+                business.phone,
+                business.address,
+                business.email,
 
-        WHERE maps_url=?
+                business.business_type,
 
-        """, (
+                business.source,
 
-            business.name,
-            business.website,
-            business.phone,
-            business.address,
-            business.email,
+                business.rule_score,
 
-            business.business_type,
+                int(business.is_open),
 
-            business.source,
+                business.status,
 
-            business.rule_score,
+                int(business.approved),
 
-            int(business.is_open),
+                now,
 
-            business.status,
-
-            int(business.approved),
-
-            now,
-
-            business.maps_url
-
-        ))
+                business.maps_url,
+            ),
+        )
 
         self.conn.commit()
 
     def get_pending(self):
 
-        self.cursor.execute("""
-
-        SELECT *
-
-        FROM discovery
-
-        WHERE status='pending'
-
-        ORDER BY id
-
-        """)
+        self.cursor.execute(
+            """
+            SELECT *
+            FROM discovery
+            WHERE status='pending'
+            ORDER BY id
+            """
+        )
 
         return self.cursor.fetchall()
 

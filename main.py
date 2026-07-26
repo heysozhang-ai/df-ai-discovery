@@ -1,10 +1,14 @@
 from browser import BrowserManager
-from maps import GoogleMaps
-from extractor import BusinessExtractor
-from website_scraper import WebsiteScraper
-from storage import Storage
-from rule_engine import RuleEngine
 
+from maps import GoogleMaps
+
+from extractor import BusinessExtractor
+
+from website_scraper import WebsiteScraper
+
+from storage import Storage
+
+from rule_engine import RuleEngine
 
 def main():
 
@@ -32,35 +36,57 @@ def main():
 
         print(f"\n========== {i+1}/{total} ==========\n")
 
-        if not maps.open_business(i):
-            continue
+        try:
 
-        business = extractor.extract()
+            if not maps.open_business(i):
 
-        if RuleEngine.should_skip(business):
+                print("Open failed.")
 
-            print("SKIP Dealer :", business.name)
+                continue
+
+            business = extractor.extract()
+
+            if RuleEngine.should_skip(business):
+
+                print("SKIP Dealer :", business.name)
+
+                maps.back_to_results()
+
+                continue
+
+            if storage.exists(business.maps_url):
+
+                print("SKIP Exists :", business.name)
+
+                maps.back_to_results()
+
+                continue
+
+            business.email = scraper.find_email(business.website)
+
+            RuleEngine.score(business)
+
+            storage.save(business)
+
+            print(business.to_dict())
+
+            # ★ 保存以后必须返回列表
 
             maps.back_to_results()
 
+        except Exception as e:
+
+            print(f"ERROR : {e}")
+
+            try:
+
+                maps.back_to_results()
+
+            except:
+
+                pass
+
             continue
-
-        if storage.exists(business.maps_url):
-
-            print("SKIP Exists :", business.name)
-
-            maps.back_to_results()
-
-            continue
-
-        business.email = scraper.find_email(business.website)
-
-        RuleEngine.score(business)
-
-        storage.save(business)
-
-        print(business.to_dict())
-
 
     storage.close()
 
@@ -68,6 +94,6 @@ def main():
 
     browser.close()
 
-
 if __name__ == "__main__":
+
     main()
